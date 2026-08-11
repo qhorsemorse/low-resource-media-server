@@ -1,0 +1,48 @@
+# Python Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+bin/
+Scripts/
+Include/
+Lib/
+
+# Media Files & Large Storage
+media/*.mp4
+media/*.mkv
+media/*.webm
+media/*.mov
+media/*.avi
+media/*.m4v
+media/*.mp3
+media/*.m4a
+media/*.flac
+media/*.wav
+media/*.ogg
+
+# Ignore subdirectories in media except .gitkeep
+media/*/**
+
+# Library Index Cache
+library_cache.json
+
+# Python bytecode & cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# OS System Files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo

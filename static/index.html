@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>32-Bit Python Media Server</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <div class="logo-icon">⚡</div>
+                <div>
+                    <h1 class="logo-title">Python Media Server</h1>
+                    <span class="logo-subtitle">Ultra-Light 32-Bit Direct Streaming</span>
+                </div>
+            </div>
+
+            <!-- Live Server Stats Badge -->
+            <div class="server-stats" id="serverStats">
+                <div class="stat-item">
+                    <span class="stat-dot green"></span>
+                    <span class="stat-label">RAM:</span>
+                    <span class="stat-val" id="statRam">-- MB</span>
+                </div>
+                <div class="stat-divider">|</div>
+                <div class="stat-item">
+                    <span class="stat-label">CPU:</span>
+                    <span class="stat-val" id="statCpu">--%</span>
+                </div>
+                <div class="stat-divider">|</div>
+                <div class="stat-item">
+                    <span class="stat-label">Streams:</span>
+                    <span class="stat-val" id="statStreams">0</span>
+                </div>
+                <button id="refreshScanBtn" class="icon-btn" title="Rescan Media Directory">🔄</button>
+            </div>
+        </header>
+
+        <!-- Controls Toolbar -->
+        <div class="toolbar">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchInput" placeholder="Search 720p movies, shows, music...">
+            </div>
+
+            <div class="filter-pills">
+                <button class="pill active" data-filter="all">All Media</button>
+                <button class="pill" data-filter="720p">🎬 720p MP4</button>
+                <button class="pill" data-filter="video">📹 Videos</button>
+                <button class="pill" data-filter="audio">🎵 Music</button>
+            </div>
+        </div>
+
+        <!-- Media Grid Container -->
+        <main class="media-section">
+            <div class="section-title-bar">
+                <h2 id="sectionTitle">Library (<span id="mediaCount">0</span>)</h2>
+            </div>
+            
+            <div id="mediaGrid" class="media-grid">
+                <!-- Media Cards will be rendered dynamically -->
+            </div>
+
+            <div id="emptyState" class="empty-state hidden">
+                <div class="empty-icon">📁</div>
+                <h3>No media found</h3>
+                <p>Place your 720p <code>.mp4</code> video or music files in the <code>media/</code> folder.</p>
+                <button id="scanBtn" class="primary-btn">Rescan Directory</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Fullscreen Video / Audio Player Modal -->
+    <div id="playerModal" class="modal hidden">
+        <div class="modal-backdrop" id="modalBackdrop"></div>
+        <div class="modal-content">
+            <div class="player-header">
+                <div class="player-title-info">
+                    <h3 id="playerTitle">Video Title</h3>
+                    <span class="player-badge" id="playerBadge">720p MP4</span>
+                </div>
+                <button id="closePlayerBtn" class="close-btn">&times;</button>
+            </div>
+
+            <!-- Resume notification alert -->
+            <div id="resumeAlert" class="resume-alert hidden">
+                <span>⏱️ Resumed playback from <strong id="resumeTimeStr">00:00</strong></span>
+            </div>
+
+            <div class="media-player-wrapper">
+                <video id="videoPlayer" controls preload="metadata" class="media-element">
+                    Your browser does not support HTML5 video streaming.
+                </video>
+                <audio id="audioPlayer" controls class="media-element hidden"></audio>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
