@@ -91,9 +91,13 @@ async def get_system_stats():
 async def list_media(
     q: Optional[str] = Query(None, description="Search keyword"),
     media_type: Optional[str] = Query(None, description="Filter by 'video' or 'audio'"),
-    only_720p: bool = Query(False, description="Filter 720p videos only")
+    only_720p: bool = Query(False, description="Filter 720p videos only"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(24, ge=1, le=100, description="Items per page")
 ):
-    """Retrieve list of media items with instant search and filtering."""
+    """Retrieve paginated list of media items with instant search and filtering."""
+    import math
+
     items = library.items
 
     if media_type:
@@ -109,10 +113,23 @@ async def list_media(
             if query_lower in i["title"].lower() or query_lower in i["filename"].lower()
         ]
 
+    total_filtered = len(items)
+    total_pages = math.ceil(total_filtered / limit) if total_filtered > 0 else 1
+    
+    # Ensure requested page is within valid bounds
+    current_page = min(page, total_pages)
+    start_idx = (current_page - 1) * limit
+    end_idx = start_idx + limit
+    page_items = items[start_idx:end_idx]
+
     return {
-        "count": len(items),
+        "count": len(page_items),
+        "total_items": total_filtered,
         "total_in_library": len(library.items),
-        "items": items
+        "page": current_page,
+        "limit": limit,
+        "total_pages": total_pages,
+        "items": page_items
     }
 
 

@@ -1,7 +1,8 @@
 /**
  * 32-Bit Python Media Server - Frontend Controller
- * Handles live stats polling, library rendering, search, filtering,
- * and seamless HTML5 video playback with resume memory.
+ * Handles live stats polling, server-side pagination, state persistence
+ * (retains page/filter state across reloads via localStorage), search,
+ * and seamless HTML5 video playback with auto-resume memory.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -12,6 +13,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const mediaCountEl = document.getElementById('mediaCount');
     const filterPills = document.querySelectorAll('.pill');
     
+    // Pagination Elements
+    const paginationBar = document.getElementById('paginationBar');
+    const prevPageBtn = document.getElementById('prevPageBtn');
+    const nextPageBtn = document.getElementById('nextPageBtn');
+    const pageIndicator = document.getElementById('pageIndicator');
+    const pageSizeSelect = document.getElementById('pageSizeSelect');
+
     // Stats Elements
     const statRam = document.getElementById('statRam');
     const statCpu = document.getElementById('statCpu');
@@ -30,11 +38,70 @@ document.addEventListener('DOMContentLoaded', () => {
     const resumeAlert = document.getElementById('resumeAlert');
     const resumeTimeStr = document.getElementById('resumeTimeStr');
 
-    // State Variables
-    let allMediaItems = [];
-    let activeFilter = 'all';
+    // -------------------------------------------------------------
+    // State Persistence (Restores page & filter state on reload)
+    // -------------------------------------------------------------
+    const STORAGE_KEY = 'media_server_view_state';
+
+    function loadSavedState() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            return {
+                page: parseInt(saved.page || '1', 10),
+                limit: parseInt(saved.limit || '24', 10),
+                filter: saved.filter || 'all',
+                search: saved.search || ''
+            };
+        } catch (e) {
+            return { page: 1, limit: 24, filter: 'all', search: '' };
+        }
+    }
+
+    function saveState() {
+        try {
+            const state = {
+                page: currentPage,
+                limit: pageSize,
+                filter: activeFilter,
+                search: searchQuery
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            
+            // Sync with URL query params
+            const url = new URL(window.location);
+            url.searchParams.set('page', currentPage);
+            url.searchParams.set('limit', pageSize);
+            if (activeFilter !== 'all') url.searchParams.set('filter', activeFilter);
+            else url.searchParams.delete('filter');
+            if (searchQuery) url.searchParams.set('q', searchQuery);
+            else url.searchParams.delete('q');
+            window.history.replaceState({}, '', url);
+        } catch (e) {
+            console.warn('Failed to save state:', e);
+        }
+    }
+
+    // Initialize State
+    const savedState = loadSavedState();
+    let currentPage = savedState.page;
+    let pageSize = savedState.limit;
+    let activeFilter = savedState.filter;
+    let searchQuery = savedState.search;
+    let totalPages = 1;
+    let currentItems = [];
     let currentPlayingId = null;
     let timeUpdateSaveTimeout = null;
+
+    // Set UI to match restored state
+    searchInput.value = searchQuery;
+    pageSizeSelect.value = pageSize.toString();
+    filterPills.forEach(pill => {
+        if (pill.dataset.filter === activeFilter) {
+            pill.classList.add('active');
+        } else {
+            pill.classList.remove('active');
+        }
+    });
 
     // Fetch Live Server Stats
     async function updateServerStats() {
@@ -51,63 +118,61 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Poll stats every 3 seconds
     updateServerStats();
     setInterval(updateServerStats, 3000);
 
-    // Fetch Media Library
-    async function loadMediaLibrary() {
+    // Fetch Paginated Media Library
+    async function fetchMediaLibrary() {
         try {
-            const res = await fetch('/api/media');
+            const params = new URLSearchParams({
+                page: currentPage.toString(),
+                limit: pageSize.toString()
+            });
+
+            if (searchQuery) params.append('q', searchQuery);
+            if (activeFilter === '720p') params.append('only_720p', 'true');
+            else if (activeFilter === 'video') params.append('media_type', 'video');
+            else if (activeFilter === 'audio') params.append('media_type', 'audio');
+
+            const res = await fetch(`/api/media?${params.toString()}`);
             if (res.ok) {
                 const data = await res.json();
-                allMediaItems = data.items || [];
-                renderLibrary();
+                currentItems = data.items || [];
+                currentPage = data.page;
+                totalPages = data.total_pages;
+                mediaCountEl.textContent = data.total_items;
+
+                saveState();
+                renderLibrary(data.total_items);
             }
         } catch (e) {
-            console.error('Error loading library:', e);
+            console.error('Error fetching media library:', e);
         }
     }
 
-    // Filter and Render Cards
-    function renderLibrary() {
-        const query = searchInput.value.trim().toLowerCase();
-        
-        let filtered = allMediaItems.filter(item => {
-            // Text Search
-            const matchesQuery = !query || 
-                item.title.toLowerCase().includes(query) || 
-                item.filename.toLowerCase().includes(query);
-
-            // Filter Pills
-            let matchesFilter = true;
-            if (activeFilter === '720p') {
-                matchesFilter = item.is_720p;
-            } else if (activeFilter === 'video') {
-                matchesFilter = item.media_type === 'video';
-            } else if (activeFilter === 'audio') {
-                matchesFilter = item.media_type === 'audio';
-            }
-
-            return matchesQuery && matchesFilter;
-        });
-
-        mediaCountEl.textContent = filtered.length;
-
-        if (filtered.length === 0) {
+    // Render Cards and Update Pagination Controls
+    function renderLibrary(totalItems) {
+        if (totalItems === 0) {
             mediaGrid.innerHTML = '';
             emptyState.classList.remove('hidden');
+            paginationBar.classList.add('hidden');
             return;
         }
 
         emptyState.classList.add('hidden');
-        mediaGrid.innerHTML = filtered.map(item => createMediaCardHTML(item)).join('');
+        paginationBar.classList.remove('hidden');
+        mediaGrid.innerHTML = currentItems.map(item => createMediaCardHTML(item)).join('');
+
+        // Update Pagination Bar UI
+        pageIndicator.textContent = `Page ${currentPage} of ${totalPages}`;
+        prevPageBtn.disabled = currentPage <= 1;
+        nextPageBtn.disabled = currentPage >= totalPages;
 
         // Attach click handlers to cards
         document.querySelectorAll('.media-card').forEach(card => {
             card.addEventListener('click', () => {
                 const id = card.dataset.id;
-                const item = allMediaItems.find(i => i.id === id);
+                const item = currentItems.find(i => i.id === id);
                 if (item) openPlayer(item);
             });
         });
@@ -139,7 +204,52 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
-    // Open Video / Audio Player Modal
+    // Pagination Event Listeners
+    prevPageBtn.addEventListener('click', () => {
+        if (currentPage > 1) {
+            currentPage--;
+            fetchMediaLibrary();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
+
+    nextPageBtn.addEventListener('click', () => {
+        if (currentPage < totalPages) {
+            currentPage++;
+            fetchMediaLibrary();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
+
+    pageSizeSelect.addEventListener('change', (e) => {
+        pageSize = parseInt(e.target.value, 10);
+        currentPage = 1;
+        fetchMediaLibrary();
+    });
+
+    // Search Input with Debounce
+    let searchDebounceTimeout = null;
+    searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchDebounceTimeout);
+        searchDebounceTimeout = setTimeout(() => {
+            searchQuery = e.target.value.trim();
+            currentPage = 1;
+            fetchMediaLibrary();
+        }, 250);
+    });
+
+    // Filter Pills
+    filterPills.forEach(pill => {
+        pill.addEventListener('click', () => {
+            filterPills.forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            activeFilter = pill.dataset.filter;
+            currentPage = 1;
+            fetchMediaLibrary();
+        });
+    });
+
+    // Open Player Modal
     function openPlayer(item) {
         currentPlayingId = item.id;
         playerTitle.textContent = item.title;
@@ -184,7 +294,6 @@ document.addEventListener('DOMContentLoaded', () => {
     videoPlayer.addEventListener('timeupdate', () => {
         if (!currentPlayingId || videoPlayer.paused) return;
 
-        // Throttle saves to once every 3 seconds
         if (!timeUpdateSaveTimeout) {
             timeUpdateSaveTimeout = setTimeout(() => {
                 if (videoPlayer.currentTime > 5) {
@@ -214,25 +323,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Search and Filters
-    searchInput.addEventListener('input', renderLibrary);
-
-    filterPills.forEach(pill => {
-        pill.addEventListener('click', () => {
-            filterPills.forEach(p => p.classList.remove('active'));
-            pill.classList.add('active');
-            activeFilter = pill.dataset.filter;
-            renderLibrary();
-        });
-    });
-
-    // Trigger Directory Scan
+    // Trigger Rescan
     async function triggerRescan() {
         try {
             refreshScanBtn.style.transform = 'rotate(360deg)';
             const res = await fetch('/api/scan', { method: 'POST' });
             if (res.ok) {
-                setTimeout(loadMediaLibrary, 1500);
+                setTimeout(fetchMediaLibrary, 1500);
             }
         } catch (e) {
             console.error('Scan error:', e);
@@ -255,6 +352,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
-    // Initial Load
-    loadMediaLibrary();
+    // Initial Fetch
+    fetchMediaLibrary();
 });
