@@ -1,5 +1,7 @@
-# Ultra-lightweight dependencies for 32-bit / 64-bit Python 3.11.2
+# Core dependencies for 32-bit / 64-bit Python 3.11.2
 fastapi>=0.100.0,<0.120.0
 uvicorn>=0.20.0,<0.35.0
 aiofiles>=23.0.0
-psutil>=5.9.0
+
+# Optional hardware resource monitoring (fallback to pure Python /proc if missing)
+# psutil>=5.9.0
